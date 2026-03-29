@@ -1,0 +1,954 @@
+PROJETO FINAL BANCO DE DADOS HOSPITAL
+
+Criacao de Tabelas
+
+PROJETO FINAL BANCO DE DADOS HOSPITAL
+
+Criacao de Tabelas
+
+CREATE TYPE status_leito AS ENUM ('ocupado', 'livre', 'manutencao');
+CREATE TYPE turno_enfermeira AS ENUM ('manha', 'tarde', 'noite');
+CREATE TYPE tipo_ala AS ENUM ('UTI', 'enfermaria', 'pediatria', 'cirurgia', 'maternidade');
+CREATE TYPE tipo_atendimento AS ENUM ('consulta', 'emergencia', 'revisao');
+CREATE TYPE status_atendimento AS ENUM ('realizado', 'cancelado', 'agendado');
+CREATE TYPE tipo_exame AS ENUM ('sangue', 'imagem');
+CREATE TYPE resultado_exame AS ENUM ('normal', 'alterado', 'critico');
+CREATE TYPE tipo_laboratorio AS ENUM ('interno', 'externo');
+CREATE TYPE status_fatura AS ENUM ('pendente', 'pago', 'cancelado', 'em_analise');
+CREATE TYPE cobertura_plano AS ENUM ('regional', 'nacional');
+
+
+CREATE TABLE hospital (
+    id_hospital SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    cnpj VARCHAR(20) NOT NULL UNIQUE
+);
+
+CREATE TABLE plano_saude (
+    id_plano SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL UNIQUE,
+    telefone VARCHAR(20),
+    cobertura cobertura_plano NOT NULL
+);
+
+CREATE TABLE credenciamento_hospital_plano (
+    id_credenciamento SERIAL PRIMARY KEY,
+    id_hospital INT,
+    id_plano INT,
+    data_credenciamento DATE,
+    FOREIGN KEY (id_hospital) REFERENCES hospital(id_hospital),
+    FOREIGN KEY (id_plano) REFERENCES plano_saude(id_plano)
+);
+
+CREATE TABLE paciente (
+    id_paciente SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    cpf VARCHAR(14) UNIQUE,
+    telefone VARCHAR(20),
+    id_plano INT,
+    FOREIGN KEY (id_plano) REFERENCES plano_saude(id_plano)
+);
+
+CREATE TABLE medico (
+    id_medico SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    crm VARCHAR(20) NOT NULL UNIQUE,
+    especialidade VARCHAR(100),
+    telefone VARCHAR(20)
+);
+
+CREATE TABLE ala (
+    id_ala SERIAL PRIMARY KEY,
+    nome VARCHAR(100),
+    tipo tipo_ala NOT NULL,
+    numero_leitos_disponiveis INT,
+    id_hospital INT REFERENCES hospital(id_hospital),
+    id_enfermeira_responsavel INT
+);
+
+CREATE TABLE enfermeira (
+    id_enfermeira SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    cre VARCHAR(20) NOT NULL UNIQUE,
+    turno turno_enfermeira NOT NULL,
+    id_ala INT REFERENCES ala(id_ala),
+    id_chefe INT REFERENCES enfermeira(id_enfermeira)
+);
+
+--Ala e enfermeira PRECISAM ser criadas nessa ordem pra não ter erro e dar esse alter table depois.
+ALTER TABLE ala ADD CONSTRAINT fk_ala_enfermeira 
+FOREIGN KEY (id_enfermeira_responsavel) REFERENCES enfermeira(id_enfermeira);
+
+CREATE TABLE leito (
+    id_leito SERIAL PRIMARY KEY,
+    numero VARCHAR(20) UNIQUE,
+    status status_leito NOT NULL,
+    id_ala INT,
+    FOREIGN KEY (id_ala) REFERENCES ala(id_ala)
+);
+
+CREATE TABLE atendimento (
+    id_atendimento SERIAL PRIMARY KEY,
+    data_hora TIMESTAMP NOT NULL,
+    tipo tipo_atendimento NOT NULL,
+    status status_atendimento NOT NULL,
+    observacoes TEXT,
+    id_paciente INT,
+    id_medico INT,
+    FOREIGN KEY (id_paciente) REFERENCES paciente(id_paciente),
+    FOREIGN KEY (id_medico) REFERENCES medico(id_medico)
+);
+
+CREATE TABLE medicamento (
+    id_medicamento SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    descricao TEXT
+);
+
+CREATE TABLE prescricao (
+    id_prescricao SERIAL PRIMARY KEY,
+    data_prescricao DATE DEFAULT CURRENT_DATE,
+    dosagem VARCHAR(50),
+    quantidade INT,
+    id_atendimento INT,
+    id_medicamento INT,
+    FOREIGN KEY (id_atendimento) REFERENCES atendimento(id_atendimento) ON DELETE CASCADE,
+    FOREIGN KEY (id_medicamento) REFERENCES medicamento(id_medicamento) ON DELETE CASCADE
+);
+
+CREATE TABLE internacao (
+    id_internacao SERIAL PRIMARY KEY,
+    id_paciente INT,
+    id_leito INT,
+    data_entrada TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    data_saida TIMESTAMP,
+    FOREIGN KEY (id_paciente) REFERENCES paciente(id_paciente),
+    FOREIGN KEY (id_leito) REFERENCES leito(id_leito),
+    CONSTRAINT chk_datas CHECK (data_saida IS NULL OR data_saida > data_entrada) --Regra: Data saída tem que ser posterior a data entrada.
+);
+
+-- Regra: Paciente não pode possuir duas internações ativas.
+CREATE UNIQUE INDEX idx_internacao_ativa ON internacao (id_paciente) WHERE data_saida IS NULL;
+
+CREATE TABLE laboratorio (
+    id_laboratorio SERIAL PRIMARY KEY,
+    nome VARCHAR(100),
+    tipo tipo_laboratorio,
+    telefone VARCHAR(20)
+);
+
+CREATE TABLE exame (
+    id_exame SERIAL PRIMARY KEY,
+    id_paciente INT,
+    id_medico INT,
+    id_laboratorio INT,
+    data_solicitacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    data_resultado TIMESTAMP,
+    tipo tipo_exame, 
+    custo DECIMAL(10,2) NOT NULL,
+    descricao TEXT,
+    resultado resultado_exame, 
+    arquivo_laudo VARCHAR(255), -- Apenas a referência (caminho do arquivo)
+    FOREIGN KEY (id_paciente) REFERENCES paciente(id_paciente),
+    FOREIGN KEY (id_medico) REFERENCES medico(id_medico),
+    FOREIGN KEY (id_laboratorio) REFERENCES laboratorio(id_laboratorio)
+);
+
+CREATE TABLE fatura (
+    id_fatura SERIAL PRIMARY KEY,
+    id_paciente INT,
+    id_plano INT,
+    id_atendimento INT,
+    id_exame INT,
+    id_internacao INT,
+    valor DECIMAL(10,2) NOT NULL,
+    status status_fatura DEFAULT 'pendente', 
+    forma_pagamento VARCHAR(50),
+    data_emissao DATE DEFAULT CURRENT_DATE,
+    data_vencimento DATE NOT NULL,
+    FOREIGN KEY (id_paciente) REFERENCES paciente(id_paciente),
+    FOREIGN KEY (id_plano) REFERENCES plano_saude(id_plano),
+    FOREIGN KEY (id_atendimento) REFERENCES atendimento(id_atendimento),
+    FOREIGN KEY (id_exame) REFERENCES exame(id_exame),
+    FOREIGN KEY (id_internacao) REFERENCES internacao(id_internacao),
+    CONSTRAINT chk_origem_fatura CHECK (id_atendimento IS NOT NULL OR id_exame IS NOT NULL OR id_internacao IS NOT NULL)
+);
+
+CREATE TABLE pesquisa_satisfacao (
+    id_pesquisa SERIAL PRIMARY KEY,
+    id_atendimento INT UNIQUE,
+    data_resposta TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    nota_geral INT CHECK (nota_geral BETWEEN 1 AND 5),
+    comentario TEXT,
+    recomendaria BOOLEAN NOT NULL DEFAULT FALSE,
+    tempo_espera_avaliacao INT CHECK (tempo_espera_avaliacao BETWEEN 1 AND 5),
+    FOREIGN KEY (id_atendimento) REFERENCES atendimento(id_atendimento)
+);
+
+
+
+- INSERTS
+- =====================
+-- HOSPITAL
+-- =====================
+INSERT INTO hospital (cnpj) VALUES
+('11111111111111'),
+('22222222222222'),
+('33333333333333'),
+('44444444444444'),
+('55555555555555'),
+('66666666666666'),
+('77777777777777'),
+('88888888888888'),
+('99999999999999'),
+('10101010101010');
+
+-- =====================
+-- PLANO_SAUDE
+-- =====================
+INSERT INTO plano_saude (nome, telefone, cobertura) VALUES
+('Unimed','1111','nacional'),
+('Amil','2222','regional'),
+('Bradesco','3333','nacional'),
+('SulAmerica','4444','nacional'),
+('Hapvida','5555','regional'),
+('NotreDame','6666','regional'),
+('Porto','7777','nacional'),
+('Golden','8888','regional'),
+('Intermedica','9999','nacional'),
+('MedSenior',NULL,'regional');
+
+-- =====================
+-- HOSPITAL_PLANO
+-- =====================
+INSERT INTO hospital_plano VALUES
+(1,1,'2026-01-10'),
+(1,2,'2026-01-15'),
+(2,3,'2026-01-20'),
+(2,4,'2026-01-25'),
+(3,5,'2026-02-01'),
+(3,6,'2026-02-05'),
+(4,7,'2026-02-10'),
+(4,8,'2026-02-15'),
+(5,9,'2026-02-20'),
+(6,10,'2026-02-25');
+
+-- =====================
+-- ALA
+-- =====================
+INSERT INTO ala (tipo, qtd_leitos_disponiveis, id_hospital) VALUES
+('UTI',10,1),
+('enfermaria',20,1),
+('pediatria',15,2),
+('cirurgia',12,2),
+('maternidade',18,3),
+('UTI',12,3),
+('enfermaria',20,4),
+('pediatria',15,4),
+('cirurgia',12,5),
+('maternidade',18,6);
+
+-- =====================
+-- ENFERMEIRA
+-- =====================
+INSERT INTO enfermeira (nome, cre, turno, id_ala, id_chefe) VALUES
+('Ana','CRE1','manha',1,NULL),
+('Maria','CRE2','tarde',2,1),
+('Julia','CRE3','noite',3,1),
+('Paula','CRE4','manha',4,2),
+('Carla','CRE5','tarde',5,2),
+('Rita','CRE6','noite',6,3),
+('Luana','CRE7','manha',7,3),
+('Patricia','CRE8','tarde',8,4),
+('Fernanda','CRE9','noite',9,4),
+('Bianca','CRE10','manha',10,NULL);
+
+-- =====================
+-- LEITO
+-- =====================
+INSERT INTO leito (status, id_ala) VALUES
+('livre',1),
+('ocupado',1),
+('livre',2),
+('ocupado',2),
+('manutencao',3),
+('livre',3),
+('ocupado',4),
+('livre',5),
+('ocupado',6),
+('livre',7);
+
+-- =====================
+-- PACIENTE
+-- =====================
+INSERT INTO paciente (nome, cpf, telefone, id_plano) VALUES
+('Joao','111','999',1),
+('Maria','222','888',2),
+('Ana','333','777',3),
+('Carlos','444','666',4),
+('Pedro','555','555',5),
+('Lucas','666','444',6),
+('Julia','777','333',7),
+('Paula','888','222',8),
+('Rafael','999','111',9),
+('Bruno','000',NULL,NULL);
+
+-- =====================
+-- MEDICO
+-- =====================
+INSERT INTO medico (nome, especialidade, crm, telefone) VALUES
+('Dr Z','Cardiologia','CRM1','111'),
+('Dr B','Ortopedia','CRM2','222'),
+('Dr C','Pediatria','CRM3','333'),
+('Dr D','Neurologia','CRM4','444'),
+('Dr E','Dermatologia','CRM5','555'),
+('Dr F','Cardiologia','CRM6','666'),
+('Dr G','Urologia','CRM7','777'),
+('Dr H','Ginecologia','CRM8','888'),
+('Dr I','Oftalmologia','CRM9','999'),
+('Dr J',NULL,'CRM10',NULL);
+
+-- =====================
+-- ATENDIMENTO
+-- =====================
+INSERT INTO atendimento (data_hora, tipo, status, observacoes, id_paciente, id_medico) VALUES
+('2026-01-10 10:00','consulta','realizado','ok',1,1),
+('2026-01-15 11:00','consulta','realizado','ok',2,2),
+('2026-02-05 12:00','emergencia','realizado','ok',3,3),
+('2026-02-20 13:00','revisao','agendado',NULL,4,4),
+('2026-03-01 14:00','consulta','cancelado','-',5,5),
+('2026-03-10 15:00','consulta','realizado','ok',6,6),
+('2026-03-25 16:00','emergencia','realizado','ok',7,7),
+('2026-04-05 17:00','consulta','realizado','ok',8,8),
+('2026-04-15 18:00','revisao','agendado','-',9,9),
+('2026-04-20 19:00','consulta','realizado',NULL,1,1);
+
+-- =====================
+-- MEDICAMENTO
+-- =====================
+INSERT INTO medicamento (nome) VALUES
+('Dipirona'),
+('Paracetamol'),
+('Ibuprofeno'),
+('Amoxicilina'),
+('Aspirina'),
+('Omeprazol'),
+('Insulina'),
+('Losartana'),
+('Metformina'),
+('Buscopan');
+
+-- =====================
+-- PRESCRICAO
+-- =====================
+INSERT INTO prescricao (data, dosagem, id_atendimento, id_medicamento) VALUES
+('2026-01-10','1x',1,1),
+('2026-01-15','2x',2,2),
+('2026-02-05','1x',3,3),
+('2026-02-20','3x',4,4),
+('2026-03-01','1x',5,5),
+('2026-03-10','2x',6,6),
+('2026-03-25','1x',7,7),
+('2026-04-05','2x',8,8),
+('2026-04-15','1x',9,9),
+('2026-04-20',NULL,10,10);
+
+-- =====================
+-- INTERNACAO
+-- =====================
+INSERT INTO internacao (data_entrada, data_saida, id_paciente, id_leito) VALUES
+('2026-01-01','2026-01-10',1,1),
+('2026-01-20','2026-02-05',2,2),
+('2026-02-01',NULL,3,3),
+('2026-02-15','2026-02-25',4,4),
+('2026-03-01',NULL,5,5),
+('2026-03-10','2026-03-20',6,6),
+('2026-03-25',NULL,7,7),
+('2026-04-01','2026-04-10',8,8),
+('2026-04-05',NULL,9,9),
+('2026-04-10',NULL,10,10);
+
+-- =====================
+-- LABORATORIO
+-- =====================
+INSERT INTO laboratorio (nome, tipo) VALUES
+('Lab A','interno'),
+('Lab B','externo'),
+('Lab C','interno'),
+('Lab D','externo'),
+('Lab E','interno'),
+('Lab F','externo'),
+('Lab G','interno'),
+('Lab H','externo'),
+('Lab I','interno'),
+('Lab J','interno');
+
+-- =====================
+-- EXAME
+-- =====================
+INSERT INTO exame 
+(tipo, custo, descricao, resultado, data_solicitacao, data_resultado, id_paciente, id_medico, id_laboratorio) VALUES
+('sangue',100,'hemograma','normal','2026-01-10','2026-01-11',1,1,1),
+('imagem',200,'raio-x','alterado','2026-01-20','2026-01-21',2,2,2),
+('sangue',150,'glicose',NULL,'2026-02-05',NULL,3,3,3),
+('imagem',300,'tomografia','critico','2026-02-15','2026-02-16',4,4,4),
+('sangue',120,'colesterol',NULL,'2026-03-01',NULL,5,5,5),
+('imagem',180,'ressonancia','normal','2026-03-10','2026-03-11',6,6,6),
+('sangue',220,'ureia','alterado','2026-03-25','2026-03-26',7,7,7),
+('imagem',90,'ultrassom',NULL,'2026-04-01',NULL,8,8,8),
+('sangue',400,'creatinina','critico','2026-04-05','2026-04-06',9,9,9),
+('imagem',250,'eco',NULL,'2026-04-10',NULL,10,10,10);
+
+-- =====================
+-- FATURAMENTO
+-- =====================
+INSERT INTO faturamento 
+(valor, status, forma_pagamento, data_emissao, data_vencimento, id_paciente, id_atendimento, id_exame, id_internacao) VALUES
+(100,'pendente','cartao','2026-01-10','2026-01-20',1,1,NULL,NULL),
+(200,'pago','pix','2026-01-20','2026-01-30',2,NULL,2,NULL),
+(150,'pendente','dinheiro','2026-02-05','2026-02-15',3,NULL,NULL,3),
+(300,'cancelado','cartao','2026-02-15','2026-02-25',4,4,NULL,NULL),
+(120,'pago','pix','2026-03-01','2026-03-10',5,NULL,5,NULL),
+(180,'pendente','dinheiro','2026-03-10','2026-03-20',6,NULL,NULL,6),
+(220,'pago','cartao','2026-03-25','2026-04-05',7,7,NULL,NULL),
+(90,'pendente','pix','2026-04-01','2026-04-10',8,NULL,8,NULL),
+(400,'em_analise','cartao','2026-04-05','2026-04-15',9,NULL,NULL,9),
+(250,'pendente','pix','2026-04-10','2026-04-20',10,NULL,NULL,NULL);
+
+-- =====================
+-- PESQUISA_SATISFACAO
+-- =====================
+INSERT INTO pesquisa_satisfacao 
+(data_resposta, nota_geral, comentario, recomendaria, tempo_espera_avaliacao, id_atendimento) VALUES
+('2026-01-10',5,'otimo',true,5,1),
+('2026-01-20',4,'bom',true,4,2),
+('2026-02-05',3,NULL,false,3,3),
+('2026-02-15',5,'excelente',true,5,4),
+('2026-03-01',2,'ruim',false,2,5),
+('2026-03-10',4,'bom',true,4,6),
+('2026-03-25',5,'otimo',true,5,7),
+('2026-04-01',3,NULL,false,3,8),
+('2026-04-05',4,'bom',true,4,9),
+('2026-04-10',NULL,NULL,false,NULL,10);
+
+
+
+
+
+CONSULTAS
+UPDATE faturamento
+SET status = 'pago'
+WHERE id_fatura = 1;
+
+select * from faturamento f 
+---------------------------------------------------------
+
+SELECT * FROM medicamento WHERE id_medicamento = 10;
+
+DELETE FROM medicamento WHERE id_medicamento = 10;
+INSERT INTO medicamento (id_medicamento, nome)
+VALUES (10, 'Buscopan');
+------------------------------------------------
+Consulta 1:
+select m.nome ,m.telefone
+from medico m
+where especialidade = 'Cardiologia'
+
+Consulta 2: 
+select p.nome,p.cpf,ps.nome
+from paciente p 
+inner join plano_saude ps on p.id_plano = ps.id_plano
+where ps.nome = 'Unimed'
+
+Consulta 3:
+SELECT id_exame, tipo, resultado, data_solicitacao, data_resultado
+FROM exame
+WHERE data_resultado IS NULL
+AND data_solicitacao BETWEEN '2026-03-01' AND '2026-03-30';
+
+select l.nome ,count(e.id_exame)as quantidade
+from exame e
+inner join laboratorio l on e.id_laboratorio =l.id_laboratorio 
+group by l.nome
+
+Consulta 4;
+select p.nome,l.id_leito,i.data_entrada
+from internacao i
+inner join paciente p on i.id_paciente = p.id_paciente 
+inner join leito l on l.id_leito = i.id_leito 
+where i.data_saida is null
+
+Consulta 5;
+select m.nome,a.data_hora,count(a.id_atendimento) as quantidade_de_atendimentos
+from medico m
+inner join atendimento a on m.id_medico = a.id_medico 
+where a.data_hora between '2026-03-01' and '2026-03-31'
+group by m.nome , a.data_hora 
+
+SELECT m.nome, COUNT(a.id_atendimento) AS total
+FROM medico m
+JOIN atendimento a ON m.id_medico = a.id_medico
+GROUP BY m.nome
+ORDER BY total desc
+LIMIT 1;
+
+Consulta 6; Revisar ??????????
+SELECT a.id_ala,
+ROUND(
+    (COUNT(CASE WHEN l.status = 'ocupado' THEN 1 END) * 100.0) 
+    / NULLIF(COUNT(l.id_leito),0), 2) AS porcentagem_ocupacao
+FROM ala a
+LEFT JOIN leito l ON a.id_ala = l.id_ala
+GROUP BY a.id_ala;
+
+Consulta 7;
+select ps.nome ,f.data_emissao ,Sum(f.valor) as Valor_Total
+from faturamento f
+inner join paciente p on f.id_paciente = p.id_paciente 
+inner join plano_saude ps on ps.id_plano = p.id_plano 
+WHERE f.data_emissao >= '2026-01-01'
+  AND f.data_emissao < '2027-01-01'
+  group by ps.nome , f.data_emissao
+
+Consulta 8;
+SELECT m.nome, COUNT(p.id_prescricao) AS total
+FROM medicamento m
+inner JOIN prescricao p ON m.id_medicamento = p.id_medicamento
+GROUP BY m.nome
+ORDER BY total DESC
+limit 2;
+
+consulta 9;
+select m.nome,m.especialidade , count(a.id_paciente) quantidade_pacientes_atendidos_medicos
+from medico m 
+inner join atendimento a on m.id_medico = a.id_medico 
+group by m.nome , m.especialidade
+
+
+consulta 10;
+select l.id_leito,p.nome,i.data_entrada,i.data_saida 
+from internacao i
+left join leito l on l.id_leito=i.id_leito 
+left join paciente p on p.id_paciente = i.id_paciente 
+where i.data_saida is null
+and i.data_entrada < '2026-03-14'
+
+consulta 11;
+SELECT 
+CASE
+    WHEN id_atendimento IS NOT NULL THEN 'Atendimento'
+    WHEN id_exame IS NOT NULL THEN 'Exame'
+    WHEN id_internacao IS NOT NULL THEN 'Internacao'
+    else 'Outro'
+END AS tipo,
+SUM(valor) AS total
+FROM faturamento
+GROUP BY tipo;
+
+
+consulta 12;
+SELECT ps.nome, SUM(f.valor) AS total
+FROM faturamento f
+JOIN paciente p ON f.id_paciente = p.id_paciente
+JOIN plano_saude ps ON p.id_plano = ps.id_plano
+WHERE ps.nome = 'Unimed'
+GROUP BY ps.nome;
+
+
+- INSERTS
+- =====================
+-- HOSPITAL
+-- =====================
+INSERT INTO hospital (cnpj) VALUES
+('11111111111111'),
+('22222222222222'),
+('33333333333333'),
+('44444444444444'),
+('55555555555555'),
+('66666666666666'),
+('77777777777777'),
+('88888888888888'),
+('99999999999999'),
+('10101010101010');
+
+-- =====================
+-- PLANO_SAUDE
+-- =====================
+INSERT INTO plano_saude (nome, telefone, cobertura) VALUES
+('Unimed','1111','nacional'),
+('Amil','2222','regional'),
+('Bradesco','3333','nacional'),
+('SulAmerica','4444','nacional'),
+('Hapvida','5555','regional'),
+('NotreDame','6666','regional'),
+('Porto','7777','nacional'),
+('Golden','8888','regional'),
+('Intermedica','9999','nacional'),
+('MedSenior',NULL,'regional');
+
+-- =====================
+-- HOSPITAL_PLANO
+-- =====================
+INSERT INTO hospital_plano VALUES
+(1,1,'2026-01-10'),
+(1,2,'2026-01-15'),
+(2,3,'2026-01-20'),
+(2,4,'2026-01-25'),
+(3,5,'2026-02-01'),
+(3,6,'2026-02-05'),
+(4,7,'2026-02-10'),
+(4,8,'2026-02-15'),
+(5,9,'2026-02-20'),
+(6,10,'2026-02-25');
+
+-- =====================
+-- ALA
+-- =====================
+INSERT INTO ala (tipo, qtd_leitos_disponiveis, id_hospital) VALUES
+('UTI',10,1),
+('enfermaria',20,1),
+('pediatria',15,2),
+('cirurgia',12,2),
+('maternidade',18,3),
+('UTI',12,3),
+('enfermaria',20,4),
+('pediatria',15,4),
+('cirurgia',12,5),
+('maternidade',18,6);
+
+-- =====================
+-- ENFERMEIRA
+-- =====================
+INSERT INTO enfermeira (nome, cre, turno, id_ala, id_chefe) VALUES
+('Ana','CRE1','manha',1,NULL),
+('Maria','CRE2','tarde',2,1),
+('Julia','CRE3','noite',3,1),
+('Paula','CRE4','manha',4,2),
+('Carla','CRE5','tarde',5,2),
+('Rita','CRE6','noite',6,3),
+('Luana','CRE7','manha',7,3),
+('Patricia','CRE8','tarde',8,4),
+('Fernanda','CRE9','noite',9,4),
+('Bianca','CRE10','manha',10,NULL);
+
+-- =====================
+-- LEITO
+-- =====================
+INSERT INTO leito (status, id_ala) VALUES
+('livre',1),
+('ocupado',1),
+('livre',2),
+('ocupado',2),
+('manutencao',3),
+('livre',3),
+('ocupado',4),
+('livre',5),
+('ocupado',6),
+('livre',7);
+
+-- =====================
+-- PACIENTE
+-- =====================
+INSERT INTO paciente (nome, cpf, telefone, id_plano) VALUES
+('Joao','111','999',1),
+('Maria','222','888',2),
+('Ana','333','777',3),
+('Carlos','444','666',4),
+('Pedro','555','555',5),
+('Lucas','666','444',6),
+('Julia','777','333',7),
+('Paula','888','222',8),
+('Rafael','999','111',9),
+('Bruno','000',NULL,NULL);
+
+-- =====================
+-- MEDICO
+-- =====================
+INSERT INTO medico (nome, especialidade, crm, telefone) VALUES
+('Dr Z','Cardiologia','CRM1','111'),
+('Dr B','Ortopedia','CRM2','222'),
+('Dr C','Pediatria','CRM3','333'),
+('Dr D','Neurologia','CRM4','444'),
+('Dr E','Dermatologia','CRM5','555'),
+('Dr F','Cardiologia','CRM6','666'),
+('Dr G','Urologia','CRM7','777'),
+('Dr H','Ginecologia','CRM8','888'),
+('Dr I','Oftalmologia','CRM9','999'),
+('Dr J',NULL,'CRM10',NULL);
+
+-- =====================
+-- ATENDIMENTO
+-- =====================
+INSERT INTO atendimento (data_hora, tipo, status, observacoes, id_paciente, id_medico) VALUES
+('2026-01-10 10:00','consulta','realizado','ok',1,1),
+('2026-01-15 11:00','consulta','realizado','ok',2,2),
+('2026-02-05 12:00','emergencia','realizado','ok',3,3),
+('2026-02-20 13:00','revisao','agendado',NULL,4,4),
+('2026-03-01 14:00','consulta','cancelado','-',5,5),
+('2026-03-10 15:00','consulta','realizado','ok',6,6),
+('2026-03-25 16:00','emergencia','realizado','ok',7,7),
+('2026-04-05 17:00','consulta','realizado','ok',8,8),
+('2026-04-15 18:00','revisao','agendado','-',9,9),
+('2026-04-20 19:00','consulta','realizado',NULL,1,1);
+
+-- =====================
+-- MEDICAMENTO
+-- =====================
+INSERT INTO medicamento (nome) VALUES
+('Dipirona'),
+('Paracetamol'),
+('Ibuprofeno'),
+('Amoxicilina'),
+('Aspirina'),
+('Omeprazol'),
+('Insulina'),
+('Losartana'),
+('Metformina'),
+('Buscopan');
+
+-- =====================
+-- PRESCRICAO
+-- =====================
+INSERT INTO prescricao (data, dosagem, id_atendimento, id_medicamento) VALUES
+('2026-01-10','1x',1,1),
+('2026-01-15','2x',2,2),
+('2026-02-05','1x',3,3),
+('2026-02-20','3x',4,4),
+('2026-03-01','1x',5,5),
+('2026-03-10','2x',6,6),
+('2026-03-25','1x',7,7),
+('2026-04-05','2x',8,8),
+('2026-04-15','1x',9,9),
+('2026-04-20',NULL,10,10);
+
+-- =====================
+-- INTERNACAO
+-- =====================
+INSERT INTO internacao (data_entrada, data_saida, id_paciente, id_leito) VALUES
+('2026-01-01','2026-01-10',1,1),
+('2026-01-20','2026-02-05',2,2),
+('2026-02-01',NULL,3,3),
+('2026-02-15','2026-02-25',4,4),
+('2026-03-01',NULL,5,5),
+('2026-03-10','2026-03-20',6,6),
+('2026-03-25',NULL,7,7),
+('2026-04-01','2026-04-10',8,8),
+('2026-04-05',NULL,9,9),
+('2026-04-10',NULL,10,10);
+
+-- =====================
+-- LABORATORIO
+-- =====================
+INSERT INTO laboratorio (nome, tipo) VALUES
+('Lab A','interno'),
+('Lab B','externo'),
+('Lab C','interno'),
+('Lab D','externo'),
+('Lab E','interno'),
+('Lab F','externo'),
+('Lab G','interno'),
+('Lab H','externo'),
+('Lab I','interno'),
+('Lab J','interno');
+
+-- =====================
+-- EXAME
+-- =====================
+INSERT INTO exame 
+(tipo, custo, descricao, resultado, data_solicitacao, data_resultado, id_paciente, id_medico, id_laboratorio) VALUES
+('sangue',100,'hemograma','normal','2026-01-10','2026-01-11',1,1,1),
+('imagem',200,'raio-x','alterado','2026-01-20','2026-01-21',2,2,2),
+('sangue',150,'glicose',NULL,'2026-02-05',NULL,3,3,3),
+('imagem',300,'tomografia','critico','2026-02-15','2026-02-16',4,4,4),
+('sangue',120,'colesterol',NULL,'2026-03-01',NULL,5,5,5),
+('imagem',180,'ressonancia','normal','2026-03-10','2026-03-11',6,6,6),
+('sangue',220,'ureia','alterado','2026-03-25','2026-03-26',7,7,7),
+('imagem',90,'ultrassom',NULL,'2026-04-01',NULL,8,8,8),
+('sangue',400,'creatinina','critico','2026-04-05','2026-04-06',9,9,9),
+('imagem',250,'eco',NULL,'2026-04-10',NULL,10,10,10);
+
+-- =====================
+-- FATURAMENTO
+-- =====================
+INSERT INTO faturamento 
+(valor, status, forma_pagamento, data_emissao, data_vencimento, id_paciente, id_atendimento, id_exame, id_internacao) VALUES
+(100,'pendente','cartao','2026-01-10','2026-01-20',1,1,NULL,NULL),
+(200,'pago','pix','2026-01-20','2026-01-30',2,NULL,2,NULL),
+(150,'pendente','dinheiro','2026-02-05','2026-02-15',3,NULL,NULL,3),
+(300,'cancelado','cartao','2026-02-15','2026-02-25',4,4,NULL,NULL),
+(120,'pago','pix','2026-03-01','2026-03-10',5,NULL,5,NULL),
+(180,'pendente','dinheiro','2026-03-10','2026-03-20',6,NULL,NULL,6),
+(220,'pago','cartao','2026-03-25','2026-04-05',7,7,NULL,NULL),
+(90,'pendente','pix','2026-04-01','2026-04-10',8,NULL,8,NULL),
+(400,'em_analise','cartao','2026-04-05','2026-04-15',9,NULL,NULL,9),
+(250,'pendente','pix','2026-04-10','2026-04-20',10,NULL,NULL,NULL);
+
+-- =====================
+-- PESQUISA_SATISFACAO
+-- =====================
+INSERT INTO pesquisa_satisfacao 
+(data_resposta, nota_geral, comentario, recomendaria, tempo_espera_avaliacao, id_atendimento) VALUES
+('2026-01-10',5,'otimo',true,5,1),
+('2026-01-20',4,'bom',true,4,2),
+('2026-02-05',3,NULL,false,3,3),
+('2026-02-15',5,'excelente',true,5,4),
+('2026-03-01',2,'ruim',false,2,5),
+('2026-03-10',4,'bom',true,4,6),
+('2026-03-25',5,'otimo',true,5,7),
+('2026-04-01',3,NULL,false,3,8),
+('2026-04-05',4,'bom',true,4,9),
+('2026-04-10',NULL,NULL,false,NULL,10);
+
+
+
+
+
+CONSULTAS
+UPDATE faturamento
+SET status = 'pago'
+WHERE id_fatura = 1;
+
+select * from faturamento f 
+---------------------------------------------------------
+
+SELECT * FROM medicamento WHERE id_medicamento = 10;
+
+DELETE FROM medicamento WHERE id_medicamento = 10;
+INSERT INTO medicamento (id_medicamento, nome)
+VALUES (10, 'Buscopan');
+------------------------------------------------
+Consulta 1:
+select m.nome ,m.telefone
+from medico m
+where especialidade = 'Cardiologia'
+
+Consulta 2: 
+select p.nome,p.cpf,ps.nome
+from paciente p 
+inner join plano_saude ps on p.id_plano = ps.id_plano
+where ps.nome = 'Unimed'
+
+Consulta 3:
+SELECT id_exame, tipo, resultado, data_solicitacao, data_resultado
+FROM exame
+WHERE data_resultado IS NULL
+AND data_solicitacao BETWEEN '2026-03-01' AND '2026-03-30';
+
+select l.nome ,count(e.id_exame)as quantidade
+from exame e
+inner join laboratorio l on e.id_laboratorio =l.id_laboratorio 
+group by l.nome
+
+Consulta 4;
+select p.nome,l.id_leito,i.data_entrada
+from internacao i
+inner join paciente p on i.id_paciente = p.id_paciente 
+inner join leito l on l.id_leito = i.id_leito 
+where i.data_saida is null
+
+Consulta 5;
+select m.nome,a.data_hora,count(a.id_atendimento) as quantidade_de_atendimentos
+from medico m
+inner join atendimento a on m.id_medico = a.id_medico 
+where a.data_hora between '2026-03-01' and '2026-03-31'
+group by m.nome , a.data_hora 
+
+SELECT m.nome, COUNT(a.id_atendimento) AS total
+FROM medico m
+JOIN atendimento a ON m.id_medico = a.id_medico
+GROUP BY m.nome
+ORDER BY total desc
+LIMIT 1;
+
+Consulta 6; Revisar ??????????
+SELECT a.id_ala,
+ROUND(
+    (COUNT(CASE WHEN l.status = 'ocupado' THEN 1 END) * 100.0) 
+    / NULLIF(COUNT(l.id_leito),0), 2) AS porcentagem_ocupacao
+FROM ala a
+LEFT JOIN leito l ON a.id_ala = l.id_ala
+GROUP BY a.id_ala;
+
+Consulta 7;
+select ps.nome ,f.data_emissao ,Sum(f.valor) as Valor_Total
+from faturamento f
+inner join paciente p on f.id_paciente = p.id_paciente 
+inner join plano_saude ps on ps.id_plano = p.id_plano 
+WHERE f.data_emissao >= '2026-01-01'
+  AND f.data_emissao < '2027-01-01'
+  group by ps.nome , f.data_emissao
+
+Consulta 8;
+SELECT m.nome, COUNT(p.id_prescricao) AS total
+FROM medicamento m
+inner JOIN prescricao p ON m.id_medicamento = p.id_medicamento
+GROUP BY m.nome
+ORDER BY total DESC
+limit 2;
+
+consulta 9;
+select m.nome,m.especialidade , count(a.id_paciente) quantidade_pacientes_atendidos_medicos
+from medico m 
+inner join atendimento a on m.id_medico = a.id_medico 
+group by m.nome , m.especialidade
+
+
+consulta 10;
+select l.id_leito,p.nome,i.data_entrada,i.data_saida 
+from internacao i
+left join leito l on l.id_leito=i.id_leito 
+left join paciente p on p.id_paciente = i.id_paciente 
+where i.data_saida is null
+and i.data_entrada < '2026-03-14'
+
+consulta 11;
+SELECT 
+CASE
+    WHEN id_atendimento IS NOT NULL THEN 'Atendimento'
+    WHEN id_exame IS NOT NULL THEN 'Exame'
+    WHEN id_internacao IS NOT NULL THEN 'Internacao'
+    else 'Outro'
+END AS tipo,
+SUM(valor) AS total
+FROM faturamento
+GROUP BY tipo;
+
+
+consulta 12;
+SELECT ps.nome, SUM(f.valor) AS total
+FROM faturamento f
+JOIN paciente p ON f.id_paciente = p.id_paciente
+JOIN plano_saude ps ON p.id_plano = ps.id_plano
+WHERE ps.nome = 'Unimed'
+GROUP BY ps.nome;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
