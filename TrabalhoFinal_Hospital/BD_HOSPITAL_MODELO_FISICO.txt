@@ -428,7 +428,7 @@ INSERT INTO pesquisa_satisfacao
 
 
 CONSULTAS
-UPDATE faturamento
+UPDATE fatura
 SET status = 'pago'
 WHERE id_fatura = 1;
 
