@@ -55,25 +55,22 @@ CREATE TABLE medico (
 
 CREATE TABLE ala (
     id_ala SERIAL PRIMARY KEY,
-    nome VARCHAR(100),
     tipo tipo_ala NOT NULL,
-    numero_leitos_disponiveis INT,
-    id_hospital INT REFERENCES hospital(id_hospital),
-    id_enfermeira_responsavel INT
+    qtd_leitos_disponiveis INT,
+    id_hospital INT,
+    FOREIGN KEY (id_hospital) REFERENCES hospital(id_hospital)
 );
 
 CREATE TABLE enfermeira (
     id_enfermeira SERIAL PRIMARY KEY,
     nome VARCHAR(100) NOT NULL,
-    cre VARCHAR(20) NOT NULL UNIQUE,
+    cre VARCHAR(20) UNIQUE NOT NULL,
     turno turno_enfermeira NOT NULL,
-    id_ala INT REFERENCES ala(id_ala),
-    id_chefe INT REFERENCES enfermeira(id_enfermeira)
+    id_ala INT,
+    id_chefe INT,
+    FOREIGN KEY (id_ala) REFERENCES ala(id_ala),
+    FOREIGN KEY (id_chefe) REFERENCES enfermeira(id_enfermeira)
 );
-
---Ala e enfermeira PRECISAM ser criadas nessa ordem pra não ter erro e dar esse alter table depois.
-ALTER TABLE ala ADD CONSTRAINT fk_ala_enfermeira 
-FOREIGN KEY (id_enfermeira_responsavel) REFERENCES enfermeira(id_enfermeira);
 
 CREATE TABLE leito (
     id_leito SERIAL PRIMARY KEY,
