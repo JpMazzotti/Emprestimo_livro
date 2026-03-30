@@ -405,7 +405,7 @@ INSERT INTO fatura
 (220,'pago','cartao','2026-03-25','2026-04-05',7,7,NULL,NULL),
 (90,'pendente','pix','2026-04-01','2026-04-10',8,NULL,8,NULL),
 (400,'em_analise','cartao','2026-04-05','2026-04-15',9,NULL,NULL,9),
-(250,'pendente','pix','2026-04-10','2026-04-20',10,NULL,10,NULL); -- Vinculado ao exame 10
+(250,'pendente','pix','2026-04-10','2026-04-20',10,NULL,10,NULL);
 
 -- =====================
 -- PESQUISA_SATISFACAO
