@@ -525,12 +525,12 @@ group by m.nome , m.especialidade
 
 
 consulta 10;
-select l.id_leito,p.nome,i.data_entrada,i.data_saida 
-from internacao i
-left join leito l on l.id_leito=i.id_leito 
-left join paciente p on p.id_paciente = i.id_paciente 
-where i.data_saida is null
-and i.data_entrada < '2026-03-14'
+SELECT l.numero AS numero_leito, p.nome AS nome_paciente, i.data_entrada
+FROM internacao i
+LEFT JOIN leito l ON l.id_leito = i.id_leito 
+LEFT JOIN paciente p ON p.id_paciente = i.id_paciente 
+WHERE i.data_saida IS NULL
+AND i.data_entrada <= CURRENT_TIMESTAMP - INTERVAL '15 days';
 
 consulta 11;
 SELECT 
