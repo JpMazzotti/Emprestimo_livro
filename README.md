@@ -1,4 +1,4 @@
-Atividades do Grupo 7 de Banco de Dados
+
 
 Turma 34/Petropolis
 
