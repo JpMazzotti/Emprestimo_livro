@@ -40,6 +40,8 @@ CREATE TABLE paciente (
     id_paciente SERIAL PRIMARY KEY,
     nome VARCHAR(100) NOT NULL,
     cpf VARCHAR(14) UNIQUE,
+    data_nascimento DATE,
+    endereco TEXT,
     telefone VARCHAR(20),
     id_plano INT,
     FOREIGN KEY (id_plano) REFERENCES plano_saude(id_plano)
@@ -426,11 +428,11 @@ INSERT INTO pesquisa_satisfacao
 
 
 CONSULTAS
-UPDATE faturamento
+UPDATE fatura
 SET status = 'pago'
 WHERE id_fatura = 1;
 
-select * from faturamento f 
+select * from fatura f 
 ---------------------------------------------------------
 
 SELECT * FROM medicamento WHERE id_medicamento = 10;
@@ -493,7 +495,7 @@ GROUP BY a.id_ala;
 
 Consulta 7;
 select ps.nome ,f.data_emissao ,Sum(f.valor) as Valor_Total
-from faturamento f
+from fatura f
 inner join paciente p on f.id_paciente = p.id_paciente 
 inner join plano_saude ps on ps.id_plano = p.id_plano 
 WHERE f.data_emissao >= '2026-01-01'
@@ -532,13 +534,13 @@ CASE
     else 'Outro'
 END AS tipo,
 SUM(valor) AS total
-FROM faturamento
+FROM fatura
 GROUP BY tipo;
 
 
 consulta 12;
 SELECT ps.nome, SUM(f.valor) AS total
-FROM faturamento f
+FROM fatura f
 JOIN paciente p ON f.id_paciente = p.id_paciente
 JOIN plano_saude ps ON p.id_plano = ps.id_plano
 WHERE ps.nome = 'Unimed'
