@@ -2,51 +2,38 @@ PROJETO FINAL BANCO DE DADOS HOSPITAL
 
 Criacao de Tabelas
 
+CREATE TYPE status_leito AS ENUM ('ocupado', 'livre', 'manutencao');
+CREATE TYPE turno_enfermeira AS ENUM ('manha', 'tarde', 'noite');
+CREATE TYPE tipo_ala AS ENUM ('UTI', 'enfermaria', 'pediatria', 'cirurgia', 'maternidade');
+CREATE TYPE tipo_atendimento AS ENUM ('consulta', 'emergencia', 'revisao');
+CREATE TYPE status_atendimento AS ENUM ('realizado', 'cancelado', 'agendado');
+CREATE TYPE tipo_exame AS ENUM ('sangue', 'imagem');
+CREATE TYPE resultado_exame AS ENUM ('normal', 'alterado', 'critico');
+CREATE TYPE tipo_laboratorio AS ENUM ('interno', 'externo');
+CREATE TYPE status_fatura AS ENUM ('pendente', 'pago', 'cancelado', 'em_analise');
+CREATE TYPE cobertura_plano AS ENUM ('regional', 'nacional');
+
+
 CREATE TABLE hospital (
     id_hospital SERIAL PRIMARY KEY,
-    cnpj VARCHAR(18) UNIQUE NOT NULL
+    nome VARCHAR(100) NOT NULL,
+    cnpj VARCHAR(20) NOT NULL UNIQUE
 );
 
 CREATE TABLE plano_saude (
     id_plano SERIAL PRIMARY KEY,
-    nome VARCHAR(100) UNIQUE NOT NULL,
+    nome VARCHAR(100) NOT NULL UNIQUE,
     telefone VARCHAR(20),
     cobertura cobertura_plano NOT NULL
 );
 
-CREATE TABLE hospital_plano (
+CREATE TABLE credenciamento_hospital_plano (
+    id_credenciamento SERIAL PRIMARY KEY,
     id_hospital INT,
     id_plano INT,
     data_credenciamento DATE,
-    PRIMARY KEY (id_hospital, id_plano),
     FOREIGN KEY (id_hospital) REFERENCES hospital(id_hospital),
     FOREIGN KEY (id_plano) REFERENCES plano_saude(id_plano)
-);
-
-CREATE TABLE ala (
-    id_ala SERIAL PRIMARY KEY,
-    tipo tipo_ala NOT NULL,
-    qtd_leitos_disponiveis INT,
-    id_hospital INT,
-    FOREIGN KEY (id_hospital) REFERENCES hospital(id_hospital)
-);
-
-CREATE TABLE enfermeira (
-    id_enfermeira SERIAL PRIMARY KEY,
-    nome VARCHAR(100) NOT NULL,
-    cre VARCHAR(20) UNIQUE NOT NULL,
-    turno turno_enfermeira NOT NULL,
-    id_ala INT,
-    id_chefe INT,
-    FOREIGN KEY (id_ala) REFERENCES ala(id_ala),
-    FOREIGN KEY (id_chefe) REFERENCES enfermeira(id_enfermeira)
-);
-
-CREATE TABLE leito (
-    id_leito SERIAL PRIMARY KEY,
-    status status_leito NOT NULL,
-    id_ala INT,
-    FOREIGN KEY (id_ala) REFERENCES ala(id_ala)
 );
 
 CREATE TABLE paciente (
@@ -61,9 +48,39 @@ CREATE TABLE paciente (
 CREATE TABLE medico (
     id_medico SERIAL PRIMARY KEY,
     nome VARCHAR(100) NOT NULL,
+    crm VARCHAR(20) NOT NULL UNIQUE,
     especialidade VARCHAR(100),
-    crm VARCHAR(20) UNIQUE NOT NULL,
     telefone VARCHAR(20)
+);
+
+CREATE TABLE ala (
+    id_ala SERIAL PRIMARY KEY,
+    nome VARCHAR(100),
+    tipo tipo_ala NOT NULL,
+    numero_leitos_disponiveis INT,
+    id_hospital INT REFERENCES hospital(id_hospital),
+    id_enfermeira_responsavel INT
+);
+
+CREATE TABLE enfermeira (
+    id_enfermeira SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    cre VARCHAR(20) NOT NULL UNIQUE,
+    turno turno_enfermeira NOT NULL,
+    id_ala INT REFERENCES ala(id_ala),
+    id_chefe INT REFERENCES enfermeira(id_enfermeira)
+);
+
+--Ala e enfermeira PRECISAM ser criadas nessa ordem pra não ter erro e dar esse alter table depois.
+ALTER TABLE ala ADD CONSTRAINT fk_ala_enfermeira 
+FOREIGN KEY (id_enfermeira_responsavel) REFERENCES enfermeira(id_enfermeira);
+
+CREATE TABLE leito (
+    id_leito SERIAL PRIMARY KEY,
+    numero VARCHAR(20) UNIQUE,
+    status status_leito NOT NULL,
+    id_ala INT,
+    FOREIGN KEY (id_ala) REFERENCES ala(id_ala)
 );
 
 CREATE TABLE atendimento (
@@ -80,102 +97,89 @@ CREATE TABLE atendimento (
 
 CREATE TABLE medicamento (
     id_medicamento SERIAL PRIMARY KEY,
-    nome VARCHAR(100) NOT NULL
+    nome VARCHAR(100) NOT NULL,
+    descricao TEXT
 );
 
 CREATE TABLE prescricao (
     id_prescricao SERIAL PRIMARY KEY,
-    data date default current_date,
+    data_prescricao DATE DEFAULT CURRENT_DATE,
     dosagem VARCHAR(50),
+    quantidade INT,
     id_atendimento INT,
     id_medicamento INT,
-    FOREIGN KEY (id_atendimento) REFERENCES atendimento(id_atendimento),
-    FOREIGN KEY (id_medicamento) REFERENCES medicamento(id_medicamento)
+    FOREIGN KEY (id_atendimento) REFERENCES atendimento(id_atendimento) ON DELETE CASCADE,
+    FOREIGN KEY (id_medicamento) REFERENCES medicamento(id_medicamento) ON DELETE CASCADE
 );
-
 
 CREATE TABLE internacao (
     id_internacao SERIAL PRIMARY KEY,
-    data_entrada date default current_date ,
-    data_saida DATE,
     id_paciente INT,
     id_leito INT,
+    data_entrada TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    data_saida TIMESTAMP,
     FOREIGN KEY (id_paciente) REFERENCES paciente(id_paciente),
     FOREIGN KEY (id_leito) REFERENCES leito(id_leito),
-    CHECK (data_saida IS NULL OR data_saida > data_entrada)
+    CONSTRAINT chk_datas CHECK (data_saida IS NULL OR data_saida > data_entrada) --Regra: Data saída tem que ser posterior a data entrada.
 );
 
-CREATE UNIQUE INDEX unica_internacao_ativa
-ON internacao (id_paciente)
-WHERE data_saida IS NULL;
+-- Regra: Paciente não pode possuir duas internações ativas.
+CREATE UNIQUE INDEX idx_internacao_ativa ON internacao (id_paciente) WHERE data_saida IS NULL;
 
 CREATE TABLE laboratorio (
     id_laboratorio SERIAL PRIMARY KEY,
     nome VARCHAR(100),
-    tipo tipo_laboratorio
+    tipo tipo_laboratorio,
+    telefone VARCHAR(20)
 );
-
 
 CREATE TABLE exame (
     id_exame SERIAL PRIMARY KEY,
-    tipo tipo_exame,
-    custo NUMERIC(10,2) not null,
-    descricao TEXT,
-    resultado resultado_exame,
-    data_solicitacao date,
-    data_resultado date,
-    arquivo_laudo BYTEA,
     id_paciente INT,
     id_medico INT,
     id_laboratorio INT,
+    data_solicitacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    data_resultado TIMESTAMP,
+    tipo tipo_exame, 
+    custo DECIMAL(10,2) NOT NULL,
+    descricao TEXT,
+    resultado resultado_exame, 
+    arquivo_laudo VARCHAR(255), -- Apenas a referência (caminho do arquivo)
     FOREIGN KEY (id_paciente) REFERENCES paciente(id_paciente),
     FOREIGN KEY (id_medico) REFERENCES medico(id_medico),
     FOREIGN KEY (id_laboratorio) REFERENCES laboratorio(id_laboratorio)
 );
 
-CREATE TABLE faturamento (
+CREATE TABLE fatura (
     id_fatura SERIAL PRIMARY KEY,
-    valor NUMERIC(10,2) not null ,
-    status status_fatura DEFAULT 'pendente',
-    forma_pagamento VARCHAR(50) not null, 
-    data_emissao date default current_date,
-    data_vencimento DATE,
     id_paciente INT,
+    id_plano INT,
     id_atendimento INT,
     id_exame INT,
     id_internacao INT,
+    valor DECIMAL(10,2) NOT NULL,
+    status status_fatura DEFAULT 'pendente', 
+    forma_pagamento VARCHAR(50),
+    data_emissao DATE DEFAULT CURRENT_DATE,
+    data_vencimento DATE NOT NULL,
     FOREIGN KEY (id_paciente) REFERENCES paciente(id_paciente),
+    FOREIGN KEY (id_plano) REFERENCES plano_saude(id_plano),
     FOREIGN KEY (id_atendimento) REFERENCES atendimento(id_atendimento),
     FOREIGN KEY (id_exame) REFERENCES exame(id_exame),
-    FOREIGN KEY (id_internacao) REFERENCES internacao(id_internacao)
+    FOREIGN KEY (id_internacao) REFERENCES internacao(id_internacao),
+    CONSTRAINT chk_origem_fatura CHECK (id_atendimento IS NOT NULL OR id_exame IS NOT NULL OR id_internacao IS NOT NULL)
 );
 
 CREATE TABLE pesquisa_satisfacao (
     id_pesquisa SERIAL PRIMARY KEY,
-    data_resposta  date default current_date  ,
-    nota_geral INT,
+    id_atendimento INT UNIQUE,
+    data_resposta TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    nota_geral INT CHECK (nota_geral BETWEEN 1 AND 5),
     comentario TEXT,
     recomendaria BOOLEAN NOT NULL DEFAULT FALSE,
-    tempo_espera_avaliacao INT,
-    id_atendimento INT,
+    tempo_espera_avaliacao INT CHECK (tempo_espera_avaliacao BETWEEN 1 AND 5),
     FOREIGN KEY (id_atendimento) REFERENCES atendimento(id_atendimento)
 );
-
-ALTER TABLE prescricao
-DROP CONSTRAINT prescricao_id_medicamento_fkey;
-
-
-ALTER TABLE prescricao
-ADD CONSTRAINT fk_prescricao_medicamento
-FOREIGN KEY (id_medicamento)
-REFERENCES medicamento(id_medicamento)
-ON DELETE CASCADE;
-
-ALTER TABLE prescricao
-ADD CONSTRAINT fk_prescricao_atendimento
-FOREIGN KEY (id_atendimento)
-REFERENCES atendimento(id_atendimento)
-ON DELETE CASCADE;
 
 
 
@@ -425,8 +429,6 @@ INSERT INTO pesquisa_satisfacao
 
 
 
-
-
 CONSULTAS
 UPDATE faturamento
 SET status = 'pago'
@@ -545,34 +547,3 @@ JOIN paciente p ON f.id_paciente = p.id_paciente
 JOIN plano_saude ps ON p.id_plano = ps.id_plano
 WHERE ps.nome = 'Unimed'
 GROUP BY ps.nome;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
