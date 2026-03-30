@@ -180,6 +180,13 @@ CREATE TABLE pesquisa_satisfacao (
     FOREIGN KEY (id_atendimento) REFERENCES atendimento(id_atendimento)
 );
 
+-- =====================
+-- UPDATE E DELETE
+-- =====================
+UPDATE fatura SET status = 'pago' WHERE id_fatura = 1;
+
+DELETE FROM medicamento WHERE id_medicamento = 10;
+INSERT INTO medicamento (id_medicamento, nome) VALUES (10, 'Buscopan');
 
 
 -- =====================
